@@ -33,7 +33,11 @@ export function useMultiplayerState() {
       const activeUsers = new Map();
       state.forEach((userState, clientId) => {
         if (clientId !== awareness.clientID && userState.user) {
-          activeUsers.set(clientId, userState.user);
+          activeUsers.set(clientId, {
+            ...userState.user,
+            pos: userState.pos || userState.user.pos,
+            rot: userState.rot || userState.user.rot
+          });
         }
       });
       setUsers(activeUsers);
