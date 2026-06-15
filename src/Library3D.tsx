@@ -7,6 +7,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import { githubToRepo, type Repo } from "./data";
+import { awareness, MultiplayerAvatars, useMultiplayerState } from "./Multiplayer";
 
 const isTouch = typeof window !== 'undefined' && (('ontouchstart' in window) || (navigator.maxTouchPoints > 0));
 
@@ -37,7 +38,7 @@ function MobileLookControls() {
 }
 
 function Walker({ onProgress, maxZ, joystick, setCameraZ, paused }: { onProgress: (z: number) => void; maxZ: number; joystick: React.MutableRefObject<Record<string, boolean>>; setCameraZ: (z: number) => void; paused: boolean }) {
-  const k = useRef<Record<string, boolean>>({}), last = useRef(0);
+  const k = useRef<Record<string, boolean>>({}), last = useRef(0), lastSync = useRef(0);
   useEffect(() => {
     const d = (e: KeyboardEvent) => k.current[e.key.toLowerCase()] = true;
     const u = (e: KeyboardEvent) => k.current[e.key.toLowerCase()] = false;
@@ -60,6 +61,14 @@ function Walker({ onProgress, maxZ, joystick, setCameraZ, paused }: { onProgress
     camera.position.z = THREE.MathUtils.clamp(camera.position.z, maxZ, 8);
     camera.position.y = 1.7;
     setCameraZ(camera.position.z);
+    
+    if (Date.now() - lastSync.current > 50) {
+      awareness.setLocalStateField('pos', [camera.position.x, camera.position.y, camera.position.z]);
+      const e = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
+      awareness.setLocalStateField('rot', [0, e.y, 0]);
+      lastSync.current = Date.now();
+    }
+    
     if (Math.abs(camera.position.z - last.current) > 2) {
       last.current = camera.position.z;
       onProgress(camera.position.z)
@@ -280,12 +289,13 @@ function Architecture({ length }: { length: number }) {
   );
 }
 
-export function Library3D({ repos, onClose, query }: { repos: Repo[]; onClose: () => void; query: string }) {
-  const [selected, setSelected] = useState<Repo | null>(null);
-  const [all, setAll] = useState(repos);
-  const [loading, setLoading] = useState(false);
+export function Library3D({ repos, query, onClose }: { repos: Repo[], query: string, onClose: () => void }) {
+  const [all, setAll] = useState<Repo[]>(repos);
+  const users = useMultiplayerState();
   const [page, setPage] = useState(2);
-  const [cameraZ, setCameraZ] = useState(7);
+  const [loading, setLoading] = useState(false);
+  const [selected, setSelected] = useState<Repo | null>(null);
+  const [cameraZ, setCameraZ] = useState(0);
   const joystick = useRef<Record<string, boolean>>({ w: false, a: false, s: false, d: false });
   const sortOptions = ["stars", "forks", "updated", "help-wanted-issues", ""];
 
@@ -332,7 +342,7 @@ export function Library3D({ repos, onClose, query }: { repos: Repo[]; onClose: (
       <div className="libraryHud">
         <div>
           <strong>THE INFINITE CODE LIBRARY</strong>
-          <span>{all.length} books · {aisles.length} aisles · {loading ? "Extending the library ahead..." : "Walk forward to load more"}</span>
+          <span>{all.length} books · {aisles.length} aisles · {users.size} other readers · {loading ? "Extending the library ahead..." : "Walk forward to load more"}</span>
         </div>
         {loading && <LoaderCircle className="spin" />}
         <button onClick={onClose}><X /></button>
@@ -347,6 +357,7 @@ export function Library3D({ repos, onClose, query }: { repos: Repo[]; onClose: (
         {aisles.map((r, i) => <Bookcase key={i} index={i} z={-i * 8} />)}
         <InstancedBooks repos={all} onOpen={setSelected} />
         <BookLabels repos={all} cameraZ={cameraZ} />
+        <MultiplayerAvatars />
         <Walker onProgress={progress} maxZ={-length + 18} joystick={joystick} setCameraZ={setCameraZ} paused={!!selected} />
         {!selected && (isTouch ? <MobileLookControls /> : <PointerLockControls />)}
       </Canvas>
